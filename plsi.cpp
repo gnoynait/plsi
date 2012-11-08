@@ -56,15 +56,18 @@ void init() {
     p_wz = new double[w * z];
     p_z = new double[z];
 
-    for (int i = 0; i < z; i++) {
-        p_z[i] = 1.0 / z;
+    double rd = 0, rw = 0;
+    for (int zi = 0; zi < z; zi ++) {
+        p_z[zi] = 1.0 / z;
 
-        for (int j = 0; j < d; j ++) {
-            p_dz[i * z + j] = 1.0 / d;
+        for (int di = 0; di < d; di ++) {
+            p_dz[zi * d + di] = 1.0 / d;
+            rd += p_dz[zi * z + di];
         }
 
-        for (int j = 0; j < w; j ++) {
-            p_wz[i * z + j] = 1.0 / w;
+        for (int wi = 0; wi < w; wi ++) {
+            p_wz[zi * w + wi] = 1.0 / w;
+            rw += p_wz[zi * z + wi];
         }
     }
 
@@ -113,22 +116,25 @@ void finish() {
 
 void debug() {
     printf("===== iteration: %d =====\n", iteration);
+    //for (int i = 0; i < z; i ++) printf("%f\n", p_z[i]);
+
+    double r = 0;
+    for (int i = 0; i < w * z; i ++) {
+        r += p_wz[i];
+    }
+    printf("w | z: %g %d\n", r, z);
+
+    r = 0;
+    for (int i = 0; i < d * z; i ++) {
+        r += p_dz[i];
+    }
+    printf("d | z: %g %d\n", r, z);
+
+    r = 0;
     for (int i = 0; i < z; i ++) {
-        printf("%f\n", p_z[i]);
-        assert(p_z[i] >= 0);
+        r += p_z[i];
     }
-
-    for (int zi = 0; zi < z; zi ++) {
-        for (int wi = 0; wi < w; wi ++) {
-            assert(p_wz[zi * z + wi] >= 0);
-        }
-    }
-
-    for (int zi = 0; zi < z; zi ++) {
-        for (int di = 0; di < w; di ++) {
-            assert(p_dz[zi * z + di] >= 0);
-        }
-    }
+    printf("z: %g 1\n", r);
 }
 
 double likelihood() {
@@ -139,12 +145,9 @@ double likelihood() {
                 tf = word_tf.second;
             double p_dw = 0;
             for (int zi = 0; zi < z; zi ++) {
-                assert(p_z[zi] >= 0);
-                assert(p_wz[zi * z + wi] >= 0);
-                assert(p_dz[zi * z + di] >= 0);
-                p_dw += p_z[zi] * p_wz[zi * z + wi] * p_dz[zi * z + di];
+                p_dw += p_z[zi] * p_wz[zi * w + wi] * p_dz[zi * d + di];
             }
-            r += tf * p_dw;
+            r += tf * log(p_dw);
         }
     }
     return r;
@@ -162,25 +165,15 @@ void update_p_dz() {
             double denominator = 0;
             double* nominator = new double[z];
             for (int zi = 0; zi < z; zi ++) {
-                nominator[zi] = p_dz[zi * z + di] * p_wz[zi * z + wi] * p_z[zi];
+                nominator[zi] = p_dz[zi * d + di] * p_wz[zi * w + wi] * p_z[zi];
                 assert(nominator[zi] >= 0);
                 denominator += nominator[zi];
-            }
-            if (!(denominator > 0)) {
-                for (int zi = 0; zi < z; zi ++) {
-                    nominator[zi] = p_dz[zi * z + di] * p_wz[zi * z + wi] * p_z[zi];
-                    denominator += nominator[zi];
-                }
             }
             assert(denominator >= 0);
             for (int zi = 0; zi < z; zi ++) {
                 double p_z_condition_d_w = nominator[zi] / denominator;
-                nominator_p_dz[zi * z + di] += tf * p_z_condition_d_w;
+                nominator_p_dz[zi * d + di] += tf * p_z_condition_d_w;
                 denominator_p_dz[zi] += tf * p_z_condition_d_w;
-                // printf("tf = %d\n", tf);
-                // printf("p_z_condition_d_w = %g\n", p_z_condition_d_w);
-                // printf("tf * p_z_condition_d_w = %g\n", tf * p_z_condition_d_w);
-                // printf("denominator_p_dz[%d] = %g\n", zi, denominator_p_dz[zi]);
                 assert(denominator_p_dz[zi] >= 0);
             }
             delete[] nominator;
@@ -189,8 +182,9 @@ void update_p_dz() {
 
     for (int di = 0; di < d; di ++) {
         for (int zi = 0; zi < z; zi ++) {
-            p_dz_new[zi * z + di] = nominator_p_dz[zi * z + di] / denominator_p_dz[zi];
-            assert(p_dz_new[zi * z + di] >= 0);
+            p_dz_new[zi * d + di] = nominator_p_dz[zi * d + di] / denominator_p_dz[zi];
+            assert(p_dz_new[zi * d + di] <= 1);
+            assert(p_dz_new[zi * d + di] >= 0);
         }
     }
 
@@ -199,7 +193,7 @@ void update_p_dz() {
 }
 
 void update_p_wz() {
-    double *nominator_p_wz = new double[d * z];
+    double *nominator_p_wz = new double[w * z];
     double *denominator_p_wz = new double[z];
     memset(nominator_p_wz, 0, sizeof(double) * w * z);
     memset(denominator_p_wz, 0, sizeof(double) * z);
@@ -211,13 +205,13 @@ void update_p_wz() {
             double denominator = 0;
             double* nominator = new double[z];
             for (int zi = 0; zi < z; zi ++) {
-                nominator[zi] = p_dz[zi * z + di] * p_wz[zi * z + wi] * p_z[zi];
+                nominator[zi] = p_dz[zi * d + di] * p_wz[zi * w + wi] * p_z[zi];
                 denominator += nominator[zi];
             }
             assert(denominator > 0);
             for (int zi = 0; zi < z; zi ++) {
                 double p_z_condition_d_w = nominator[zi] / denominator;
-                nominator_p_wz[zi * z + di] += tf * p_z_condition_d_w;
+                nominator_p_wz[zi * w + wi] += tf * p_z_condition_d_w;
                 denominator_p_wz[zi] += tf * p_z_condition_d_w;
             }
             delete[] nominator;
@@ -226,8 +220,9 @@ void update_p_wz() {
 
     for (int wi = 0; wi < w; wi ++) {
         for (int zi = 0; zi < z; zi ++) {
-            p_wz_new[zi * z + wi] = nominator_p_wz[zi * z + wi] / denominator_p_wz[zi];
-            assert(p_wz_new[zi * z + wi] >= 0);
+            p_wz_new[zi * w + wi] = nominator_p_wz[zi * w + wi] / denominator_p_wz[zi];
+            assert(p_wz_new[zi * w + wi] >= 0);
+            assert(p_wz_new[zi * w + wi] <= 1);
         }
     }
 
@@ -247,11 +242,7 @@ void update_p_z() {
             double denominator = 0;
             double* nominator = new double[z];
             for (int zi = 0; zi < z; zi ++) {
-                nominator[zi] = p_dz[zi * z + di] * p_wz[zi * z + wi] * p_z[zi];
-                if (iteration > 0) {
-                    //printf("%g %g %g\n", p_dz[zi * z + di], p_wz[zi * z + wi], p_z[zi]);
-                    //printf("debug: nominator[%d] = %g\n", zi, nominator[zi]);
-                }
+                nominator[zi] = p_dz[zi * d + di] * p_wz[zi * w + wi] * p_z[zi];
                 denominator += nominator[zi];
             }
             assert(denominator > 0);
@@ -271,7 +262,8 @@ void update_p_z() {
 
     for (int zi = 0; zi < z; zi ++) {
         p_z_new[zi] = nominator_p_z[zi] / denominator_p_z;
-        assert(p_z_new[zi] != 0);
+        assert(p_z_new[zi] >= 0);
+        assert(p_z_new[zi] <= 1);
     }
 
     delete[] nominator_p_z;
@@ -290,15 +282,14 @@ void train() {
     double last_likelihood = -1;
     for (iteration = 0; iteration < MAX_ITERATION; iteration++) {
         update();
+        //debug();
         double now_likelihood = likelihood();
-        fprintf(stdout, "iteration: %d, likelihood: %g\n", iteration, now_likelihood);
-        if (fabs(now_likelihood - last_likelihood) < tol) {
-            break;
-        }
+        fprintf(stdout, "iteration: %d, log-likelihood: %f\n", iteration, now_likelihood);
+        //if (fabs(now_likelihood - last_likelihood) < tol) break;
+        last_likelihood = now_likelihood;
         if (iteration % 10 == 0) {
             output();
         }
-        debug();
     }
 }
 

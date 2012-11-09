@@ -6,8 +6,9 @@
 #include <cassert>
 #include <cstring>
 #include <random>
+#include <chrono>
 
-#define MAX_ITERATION 1000
+#define MAX_ITERATION 10000
 #define tol 1e-3
 
 using std::vector;
@@ -57,8 +58,10 @@ void init() {
     p_wz = new double[w * z];
     p_z = new double[z];
 
-    std::default_random_engine generator;
+    auto seed = std::chrono::system_clock::now().time_since_epoch().count();
+    std::default_random_engine generator(seed);
     std::uniform_real_distribution<double> distribution(0.0, 1.0);
+
     for (int zi = 0; zi < z; zi ++) {
         p_z[zi] = distribution(generator);
 
@@ -74,7 +77,6 @@ void init() {
     p_dz_new = new double[d * z];
     p_wz_new = new double[w * z];
     p_z_new = new double[z];
-
 }
 
 void output() {
@@ -153,29 +155,49 @@ double likelihood() {
     return r;
 }
 
-void update_p_dz() {
+void update() {
+
     double *nominator_p_dz = new double[d * z];
     double *denominator_p_dz = new double[z];
     memset(nominator_p_dz, 0, sizeof(double) * d * z);
     memset(denominator_p_dz, 0, sizeof(double) * z);
+
+    double *nominator_p_wz = new double[w * z];
+    double *denominator_p_wz = new double[z];
+    memset(nominator_p_wz, 0, sizeof(double) * w * z);
+    memset(denominator_p_wz, 0, sizeof(double) * z);
+
+    double *nominator_p_z = new double[z];
+    double denominator_p_z = 0;
+    memset(nominator_p_z, 0, sizeof(double) * z);
+
     for (int di = 0; di < d; di ++) {
         for (auto& word_tf : docs[di]) {
             int wi = word_tf.first,
                 tf = word_tf.second;
             double denominator = 0;
             double* nominator = new double[z];
+
             for (int zi = 0; zi < z; zi ++) {
                 nominator[zi] = p_dz[di * z + zi] * p_wz[wi * z + zi] * p_z[zi];
                 assert(nominator[zi] >= 0);
                 denominator += nominator[zi];
             }
             assert(denominator >= 0);
+
             for (int zi = 0; zi < z; zi ++) {
                 double p_z_condition_d_w = nominator[zi] / denominator;
+
                 nominator_p_dz[di * z + zi] += tf * p_z_condition_d_w;
                 denominator_p_dz[zi] += tf * p_z_condition_d_w;
-                assert(denominator_p_dz[zi] >= 0);
+
+                nominator_p_wz[wi * z + zi] += tf * p_z_condition_d_w;
+                denominator_p_wz[zi] += tf * p_z_condition_d_w;
+
+                nominator_p_z[zi] += tf * p_z_condition_d_w;
             }
+            denominator_p_z += tf;
+
             delete[] nominator;
         }
     }
@@ -188,75 +210,11 @@ void update_p_dz() {
         }
     }
 
-    delete[] nominator_p_dz;
-    delete[] denominator_p_dz;
-}
-
-void update_p_wz() {
-    double *nominator_p_wz = new double[w * z];
-    double *denominator_p_wz = new double[z];
-    memset(nominator_p_wz, 0, sizeof(double) * w * z);
-    memset(denominator_p_wz, 0, sizeof(double) * z);
-
-    for (int di = 0; di < d; di ++) {
-        for (auto& word_tf : docs[di]) {
-            int wi = word_tf.first,
-                tf = word_tf.second;
-            double denominator = 0;
-            double* nominator = new double[z];
-            for (int zi = 0; zi < z; zi ++) {
-                nominator[zi] = p_dz[di * z + zi] * p_wz[wi * z + zi] * p_z[zi];
-                denominator += nominator[zi];
-            }
-            assert(denominator > 0);
-            for (int zi = 0; zi < z; zi ++) {
-                double p_z_condition_d_w = nominator[zi] / denominator;
-                nominator_p_wz[wi * z + zi] += tf * p_z_condition_d_w;
-                denominator_p_wz[zi] += tf * p_z_condition_d_w;
-            }
-            delete[] nominator;
-        }
-    }
-
     for (int wi = 0; wi < w; wi ++) {
         for (int zi = 0; zi < z; zi ++) {
             p_wz_new[wi * z + zi] = nominator_p_wz[wi * z + zi] / denominator_p_wz[zi];
             assert(p_wz_new[wi * z + zi] >= 0);
             assert(p_wz_new[wi * z + zi] <= 1);
-        }
-    }
-
-    delete[] nominator_p_wz;
-    delete[] denominator_p_wz;
-}
-
-void update_p_z() {
-    double *nominator_p_z = new double[z];
-    double denominator_p_z = 0;
-    memset(nominator_p_z, 0, sizeof(double) * z);
-
-    for (int di = 0; di < d; di ++) {
-        for (auto& word_tf : docs[di]) {
-            int wi = word_tf.first,
-                tf = word_tf.second;
-            double denominator = 0;
-            double* nominator = new double[z];
-            for (int zi = 0; zi < z; zi ++) {
-                nominator[zi] = p_dz[di * z + zi] * p_wz[wi * z + zi] * p_z[zi];
-                denominator += nominator[zi];
-            }
-            assert(denominator > 0);
-            //printf("debug: denominator = %g\n", denominator);
-            if (denominator == 0) {
-                printf("%d %d\n", di, wi);
-                exit(EXIT_FAILURE);
-            }
-            for (int zi = 0; zi < z; zi ++) {
-                double p_z_condition_d_w = nominator[zi] / denominator;
-                nominator_p_z[zi] += tf * p_z_condition_d_w;
-            }
-            denominator_p_z += tf;
-            delete[] nominator;
         }
     }
 
@@ -266,13 +224,14 @@ void update_p_z() {
         assert(p_z_new[zi] <= 1);
     }
 
-    delete[] nominator_p_z;
-}
+    delete[] nominator_p_dz;
+    delete[] denominator_p_dz;
 
-void update() {
-    update_p_dz();
-    update_p_wz();
-    update_p_z();
+    delete[] nominator_p_wz;
+    delete[] denominator_p_wz;
+
+    delete[] nominator_p_z;
+
     swap(p_wz, p_wz_new);
     swap(p_dz, p_dz_new);
     swap(p_z, p_z_new);

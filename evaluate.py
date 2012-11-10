@@ -6,25 +6,28 @@ def read():
     p_wz = []
     for l in open('wz'):
         p_wz.append(list(map(float, l.split())))
-
+    w = len(p_wz[0])
+    p_w = [0] * w
+    for zi, wz in enumerate(p_wz):
+        for wi, p in enumerate(wz):
+            p_w[wi] += p * p_z[zi]
     docs = []
     for l in open('docs_test'):
-        doc = dict(map(int, k.split(':')) for k in l.split())
+        features = [map(int, k.split(':')) for k in l.split()]
+        doc = dict((k, v) for k, v in features if k < w)
         docs.append(doc)
 
-    return docs, p_z, p_wz
+    return docs, p_w
 
-def perplexity(docs, p_z, p_wz):
-    denominator = sum(sum(d.values()) for d in docs)
+def perplexity(docs, p_w):
     nominator = 0.0
+    denominator = 0
     for d in docs:
-        p_w = 1
-        for w, tf in d.items():
-            r = 0
-            for zi in range(len(p_z)):
-                r += p_wz[zi][w] * p_z[zi]
-            p_w *= r
-        nominator += log(p_w, 2)
+        for wi, tf in d.items():
+            if p_w[wi] > 0:
+                nominator += tf * log(p_w[wi], 2)
+                denominator += tf
+    print(nominator, denominator)
     perplexity = exp(-nominator / denominator)
     return perplexity
 

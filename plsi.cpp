@@ -8,7 +8,6 @@
 #include <random>
 #include <chrono>
 
-#define MAX_ITERATION 10000
 #define tol 1e-3
 
 using std::vector;
@@ -18,20 +17,13 @@ using std::pair;
 int d = 0, w = 0;
 vector<vector<pair<int, int>>> docs;
 int z = 0;
+int iteration_max;
 int iteration;
 
 double *p_dz, *p_wz, *p_z;
-double *p_dz_new, *p_wz_new, *p_z_new;
-
-template <class T>
-void swap(T& a, T& b) {
-    T c = a;
-    a = b;
-    b = c;
-}
 
 void read() {
-    FILE* file = fopen("docs", "r");
+    FILE* file = fopen("docs_train", "r");
     vector<pair<int, int>> doc;
     while (!feof(file)) {
         int word, count;
@@ -48,7 +40,15 @@ void read() {
     }
     d = docs.size();
     w ++;
-    z = 50;
+
+    const char *z_str = getenv("Z");
+    if (z_str == NULL) z_str = "10";
+    z = atoi(z_str);
+
+    const char *iteration_max_str = getenv("IMAX");
+    if (iteration_max_str == NULL) iteration_max_str = "1000";
+    iteration_max = atoi(iteration_max_str);
+
     printf("%d docs read, %d words, %d topics\n", d, w, z);
     fclose(file);
 }
@@ -73,10 +73,6 @@ void init() {
             p_wz[wi * z + zi] = distribution(generator);
         }
     }
-
-    p_dz_new = new double[d * z];
-    p_wz_new = new double[w * z];
-    p_z_new = new double[z];
 }
 
 void output() {
@@ -111,9 +107,6 @@ void finish() {
     delete[] p_dz;
     delete[] p_wz;
     delete[] p_z;
-    delete[] p_dz_new;
-    delete[] p_wz_new;
-    delete[] p_z_new;
 }
 
 void debug() {
@@ -204,24 +197,24 @@ void update() {
 
     for (int di = 0; di < d; di ++) {
         for (int zi = 0; zi < z; zi ++) {
-            p_dz_new[di * z + zi] = nominator_p_dz[di * z + zi] / denominator_p_dz[zi];
-            assert(p_dz_new[di * z + zi] <= 1);
-            assert(p_dz_new[di * z + zi] >= 0);
+            p_dz[di * z + zi] = nominator_p_dz[di * z + zi] / denominator_p_dz[zi];
+            assert(p_dz[di * z + zi] <= 1);
+            assert(p_dz[di * z + zi] >= 0);
         }
     }
 
     for (int wi = 0; wi < w; wi ++) {
         for (int zi = 0; zi < z; zi ++) {
-            p_wz_new[wi * z + zi] = nominator_p_wz[wi * z + zi] / denominator_p_wz[zi];
-            assert(p_wz_new[wi * z + zi] >= 0);
-            assert(p_wz_new[wi * z + zi] <= 1);
+            p_wz[wi * z + zi] = nominator_p_wz[wi * z + zi] / denominator_p_wz[zi];
+            assert(p_wz[wi * z + zi] >= 0);
+            assert(p_wz[wi * z + zi] <= 1);
         }
     }
 
     for (int zi = 0; zi < z; zi ++) {
-        p_z_new[zi] = nominator_p_z[zi] / denominator_p_z;
-        assert(p_z_new[zi] >= 0);
-        assert(p_z_new[zi] <= 1);
+        p_z[zi] = nominator_p_z[zi] / denominator_p_z;
+        assert(p_z[zi] >= 0);
+        assert(p_z[zi] <= 1);
     }
 
     delete[] nominator_p_dz;
@@ -231,15 +224,11 @@ void update() {
     delete[] denominator_p_wz;
 
     delete[] nominator_p_z;
-
-    swap(p_wz, p_wz_new);
-    swap(p_dz, p_dz_new);
-    swap(p_z, p_z_new);
 }
 
 void train() {
     double last_likelihood = -1;
-    for (iteration = 0; iteration < MAX_ITERATION; iteration++) {
+    for (iteration = 0; iteration < iteration_max; iteration++) {
         update();
         // debug();
         double now_likelihood = likelihood();

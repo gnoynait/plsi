@@ -24,20 +24,20 @@ In fact, we won't store P(z|d,w) as it'll be too large, besides it's unnecessary
 Evaluation
 ----------
 
-Randomly split the docs into training(90%) and testing(10%). Calculate the perplexity for each k from 10 to 200.
+Run ``./test.sh`` to collect data for Z ranging from 10 to 5000. And ``./draw.sh && ./draw.py`` to generate the graph for the relation with Z and log-likelihood.
 
 Results
 -------
 
-Top words for each topic are collected in 'topics.txt'. A chart for 'topics and perplexity' are drew in the 'k-p.png'.
+Top words for each topic are collected in 'topics.txt' (Z=100). A chart for 'topics and perplexity' are drew in the 'z_likelihood.png'.
 
 How to run
 ----------
 
-Use ``preprocess.py`` to extract features. Use ``split.py`` to split docs. Then ``make`` and run ``./plsi``. You can specific topics and max iterations with environment variables:
+Use ``preprocess.py`` to extract features. Then ``make`` and run ``./plsi``. You can specific topics and max iterations with environment variables:
 
     Z=10 IMAX=10000 ./plsi
 
-After that, use ``evaluate.py`` to calculate perplexity for the test doc.
+You can run ``test.sh`` to test the algorithm with different Z. ``./show_words.py`` will display top words for each topic.
 
-Tested under ArchLinux, gcc 4.7.2, python3.3.
+Tested under ArchLinux, gcc 4.7.2, python3.3 with matplotlib.
